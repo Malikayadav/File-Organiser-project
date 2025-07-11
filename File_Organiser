@@ -1,0 +1,178 @@
+#!/usr/bin/env python3
+import os
+import shutil
+from pathlib import Path
+
+def create_category_folders(directory: str, categories: dict) -> None:
+    """Create folders for each category if they don't exist."""
+    for folder in categories.values():
+        folder_path = os.path.join(directory, folder)
+        os.makedirs(folder_path, exist_ok=True)
+
+def get_file_category(extension: str, categories: dict) -> str:
+    """Determine which category a file extension belongs to."""
+    extension = extension.lower()
+    for category, exts in categories.items():
+        if extension in exts:
+            return category
+    return "Other"
+
+def organize_files(directory: str = ".", dry_run: bool = False) -> None:
+    """
+    Organize files in the specified directory into categorized folders.
+    
+    Args:
+        directory (str): The directory to organize (default is current directory)
+        dry_run (bool): If True, only show what would be done without moving files
+    """
+    # Define file categories and their extensions
+    categories = {
+        "Documents": {
+            "pdf", "doc", "docx", "txt", "rtf", "odt", "tex", "wpd", "xls", "xlsx", 
+            "ppt", "pptx", "csv", "md", "odp", "ods"
+        },
+        "Images": {
+            "jpg", "jpeg", "png", "gif", "webp", "tiff", "bmp", "svg", "heic", "psd"
+        },
+        "Audio": {
+            "mp3", "wav", "ogg", "flac", "aac", "m4a", "wma"
+        },
+        "Video": {
+            "mp4", "mov", "avi", "mkv", "flv", "wmv", "webm", "m4v"
+        },
+        "Archives": {
+            "zip", "rar", "7z", "tar", "gz", "bz2", "xz"
+        },
+        "Code": {
+            "py", "js", "html", "css", "php", "java", "c", "cpp", "h", "sh", "bat",
+            "json", "xml", "yml", "yaml", "sql"
+        },
+        "Executables": {
+            "exe", "msi", "apk", "deb", "rpm", "dmg", "app"
+        }
+    }
+
+    # Map categories to folder names
+    folder_names = {
+        "Documents": "Documents",
+        "Images": "Images",
+        "Audio": "Audio",
+        "Video": "Video",
+        "Archives": "Archives",
+        "Code": "Code",
+        "Executables": "Executables",
+        "Other": "Other Files"
+    }
+
+    try:
+        directory = os.path.abspath(directory)
+        
+        if not os.path.isdir(directory):
+            raise ValueError(f"The specified path is not a directory: {directory}")
+
+        print(f"\nOrganizing files in: {directory}")
+        print("=" * (len(directory) + 16))
+
+        # Create all needed folders
+        create_category_folders(directory, folder_names)
+
+        # Track statistics
+        files_processed = 0
+        files_moved = 0
+        skipped_files = []
+
+        # Iterate through all files in the directory
+        for filename in os.listdir(directory):
+            filepath = os.path.join(directory, filename)
+
+            # Skip directories and hidden files
+            if os.path.isdir(filepath) or filename.startswith('.'):
+                continue
+
+            # Skip our own script if it's in the same directory
+            if filename == os.path.basename(__file__):
+                continue
+
+            files_processed += 1
+
+            # Get file extension
+            file_ext = Path(filename).suffix[1:]  # Remove the dot
+            
+            # Determine category
+            category = get_file_category(file_ext, categories)
+            dest_folder = folder_names[category]
+            dest_path = os.path.join(directory, dest_folder, filename)
+
+            # Print action
+            action = "Would move" if dry_run else "Moving"
+            print(f"{action} {filename} -> {dest_folder}/")
+
+            # Skip if dry run is enabled
+            if dry_run:
+                files_moved += 1
+                continue
+
+            # Check if file already exists in destination
+            if os.path.exists(dest_path):
+                # Handle duplicate files with a suffix
+                counter = 1
+                name, ext = os.path.splitext(filename)
+                while True:
+                    new_name = f"{name}_{counter}{ext}"
+                    new_path = os.path.join(directory, dest_folder, new_name)
+                    if not os.path.exists(new_path):
+                        dest_path = new_path
+                        break
+                    counter += 1
+
+                print(f"Renaming duplicate file to: {new_name}")
+
+            try:
+                shutil.move(filepath, dest_path)
+                files_moved += 1
+            except Exception as e:
+                skipped_files.append(filename)
+                print(f"Error moving {filename}: {e}")
+
+        # Print summary
+        print("\n" + "=" * 40)
+        print(f"Files processed: {files_processed}")
+        print(f"Files moved: {files_moved}")
+        
+        if skipped_files:
+            print(f"\nFiles that couldn't be moved ({len(skipped_files)}):")
+            for f in skipped_files:
+                print(f" - {f}")
+        
+        if dry_run:
+            print("\nNOTE: Dry run completed - no files were actually moved")
+        
+        print("\nOrganization complete!")
+
+    except Exception as e:
+        print(f"\nError: {e}")
+        exit(1)
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Organize files in a directory based on their file types."
+    )
+    parser.add_argument(
+        "directory", 
+        nargs="?", 
+        default=".", 
+        help="Directory to organize (default is current directory)"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be done without actually moving files"
+    )
+    
+    args = parser.parse_args()
+    
+    organize_files(args.directory, args.dry_run)
+
+
