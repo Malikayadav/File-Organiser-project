@@ -1,0 +1,244 @@
+import tkinter as tk
+from tkinter import ttk, messagebox
+from PIL import Image, ImageTk
+import requests
+import io
+from datetime import datetime
+
+class WeatherApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Weather Forecast")
+        self.root.geometry("600x750")
+        self.root.configure(bg="#f0f0f0")
+
+        # Main container
+        self.main_frame = tk.Frame(self.root, bg="#f0f0f0")
+        self.main_frame.pack(pady=20, padx=20, fill="both", expand=True)
+
+        # Title
+        self.title_label = tk.Label(self.main_frame, 
+                                  text="Weather Forecast", 
+                                  font=("Helvetica", 24, "bold"), 
+                                  bg="#f0f0f0")
+        self.title_label.pack(pady=10)
+
+        # Search frame
+        self.search_frame = tk.Frame(self.main_frame, bg="#f0f0f0")
+        self.search_frame.pack(pady=10)
+
+        # City input
+        self.city_label = tk.Label(self.search_frame, text="City:", bg="#f0f0f0", font=("Helvetica", 12))
+        self.city_label.grid(row=0, column=0, padx=5)
+
+        self.city_entry = tk.Entry(self.search_frame, font=("Helvetica", 12), width=25)
+        self.city_entry.grid(row=0, column=1, padx=5)
+
+        # Search button
+        self.search_button = tk.Button(self.search_frame, text="Get Weather", 
+                                     command=self.get_weather,
+                                     bg="#4a7a8c", fg="white",
+                                     font=("Helvetica", 12), width=15)
+        self.search_button.grid(row=0, column=2, padx=5)
+
+        # Current weather frame
+        self.current_frame = tk.LabelFrame(self.main_frame, text="Current Weather", 
+                                         font=("Helvetica", 14, "bold"),
+                                         bg="#f0f0f0")
+        self.current_frame.pack(pady=10, fill="x", padx=10)
+
+        # Forecast frame
+        self.forecast_frame = tk.LabelFrame(self.main_frame, text="5-Day Forecast", 
+                                          font=("Helvetica", 14, "bold"),
+                                          bg="#f0f0f0")
+        self.forecast_frame.pack(pady=10, fill="both", expand=True, padx=10)
+
+        # Error handling
+        self.error_label = tk.Label(self.main_frame, text="", fg="red", bg="#f0f0f0")
+        self.error_label.pack()
+
+    def get_weather(self):
+        city = self.city_entry.get().strip()
+        if not city:
+            messagebox.showwarning("Input Error", "Please enter a city name")
+            return
+
+        try:
+            # Get coordinates
+            geo_url = "http://api.openweathermap.org/geo/1.0/direct"
+            params = {
+                "q": city,
+                "limit": 1,
+                "appid": "f5fc5350707c1e81a1791a73269bab68"  # Replace with your API key
+            }
+            response = requests.get(geo_url, params=params)
+            geo_data = response.json()
+
+            if not geo_data:
+                messagebox.showerror("Error", "City not found!")
+                return
+
+            lat = geo_data[0]["lat"]
+            lon = geo_data[0]["lon"]
+
+            # Get weather data
+            weather_url = "https://api.openweathermap.org/data/2.5/forecast"
+            params = {
+                "lat": lat,
+                "lon": lon,
+                "appid": "f5fc5350707c1e81a1791a73269bab68",  # Replace with your API key
+                "units": "metric",
+                "cnt": 40  # Get more data points
+            }
+            response = requests.get(weather_url, params=params)
+            weather_data = response.json()
+
+            # Display current weather
+            self.show_current_weather(weather_data["list"][0])
+
+            # Display forecast
+            self.show_forecast(weather_data["list"])
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to fetch data: {e}")
+
+    def show_current_weather(self, current):
+        # Clear previous widgets
+        for widget in self.current_frame.winfo_children():
+            widget.destroy()
+
+        # Date and time
+        dt = datetime.fromtimestamp(current["dt"])
+        date_str = dt.strftime("%A, %B %d, %Y")
+        time_str = dt.strftime("%I:%M %p")
+
+        date_label = tk.Label(self.current_frame, text=date_str, 
+                             font=("Helvetica", 12), bg="#f0f0f0")
+        date_label.pack()
+
+        time_label = tk.Label(self.current_frame, text=time_str, 
+                            font=("Helvetica", 12), bg="#f0f0f0")
+        time_label.pack()
+
+        # Temperature and icon
+        icon_url = f"http://openweathermap.org/img/wn/{current['weather'][0]['icon']}@4x.png"
+        icon_img = self.get_image_from_url(icon_url, (150, 150))
+        
+        temp_frame = tk.Frame(self.current_frame, bg="#f0f0f0")
+        temp_frame.pack(pady=5)
+
+        icon_label = tk.Label(temp_frame, image=icon_img, bg="#f0f0f0")
+        icon_label.image = icon_img
+        icon_label.pack(side="left", padx=10)
+
+        temp_label = tk.Label(temp_frame, 
+                            text=f"{round(current['main']['temp'])}°C", 
+                            font=("Helvetica", 36, "bold"), 
+                            bg="#f0f0f0")
+        temp_label.pack(side="left", padx=10)
+
+        # Weather details
+        details_frame = tk.Frame(self.current_frame, bg="#f0f0f0")
+        details_frame.pack(pady=10)
+
+        details = [
+            ("Feels Like", f"{round(current['main']['feels_like'])}°C"),
+            ("Humidity", f"{current['main']['humidity']}%"),
+            ("Wind", f"{current['wind']['speed']} m/s"),
+            ("Pressure", f"{current['main']['pressure']} hPa"),
+            ("Condition", current["weather"][0]["description"].capitalize())
+        ]
+
+        for i, (label, value) in enumerate(details):
+            row = i // 2
+            col = i % 2 * 2
+
+            lbl = tk.Label(details_frame, text=label, bg="#f0f0f0", font=("Helvetica", 10))
+            lbl.grid(row=row, column=col, sticky="e", padx=5, pady=2)
+
+            val = tk.Label(details_frame, text=value, bg="#f0f0f0", font=("Helvetica", 10, "bold"))
+            val.grid(row=row, column=col+1, sticky="w", padx=5, pady=2)
+
+    def show_forecast(self, forecast_data):
+        # Clear previous widgets
+        for widget in self.forecast_frame.winfo_children():
+            widget.destroy()
+
+        # Organize by day (we'll take one forecast per day at 12:00)
+        daily_data = {}
+        for forecast in forecast_data:
+            date = datetime.fromtimestamp(forecast["dt"]).date()
+            time = datetime.fromtimestamp(forecast["dt"]).time()
+            if time.hour == 12:  # We'll use midday forecast as representative
+                daily_data[date] = forecast
+
+        # Display forecast cards
+        for date, forecast in list(daily_data.items())[:5]:  # Only show next 5 days
+            self.add_forecast_card(forecast)
+
+    def add_forecast_card(self, forecast):
+        card = tk.Frame(self.forecast_frame, bg="white", relief=tk.RAISED, borderwidth=1)
+        card.pack(fill="x", pady=5, padx=5, ipady=5)
+
+        # Date
+        dt = datetime.fromtimestamp(forecast["dt"])
+        date_str = dt.strftime("%A, %b %d")
+        date_label = tk.Label(card, text=date_str, bg="white", font=("Helvetica", 12, "bold"))
+        date_label.pack(anchor="w", padx=10, pady=5)
+
+        # Main forecast info
+        info_frame = tk.Frame(card, bg="white")
+        info_frame.pack(fill="x", padx=10, pady=5)
+
+        # Weather icon
+        icon_url = f"http://openweathermap.org/img/wn/{forecast['weather'][0]['icon']}.png"
+        icon_img = self.get_image_from_url(icon_url, (64, 64))
+        icon_label = tk.Label(info_frame, image=icon_img, bg="white")
+        icon_label.image = icon_img
+        icon_label.pack(side="left", padx=10)
+
+        # Temperature and condition
+        temp_frame = tk.Frame(info_frame, bg="white")
+        temp_frame.pack(side="left", fill="x")
+
+        temp_label = tk.Label(temp_frame, 
+                            text=f"{round(forecast['main']['temp'])}°C", 
+                            font=("Helvetica", 16, "bold"), 
+                            bg="white")
+        temp_label.pack(anchor="w")
+
+        condition_label = tk.Label(temp_frame, 
+                                 text=forecast["weather"][0]["description"].capitalize(), 
+                                 bg="white")
+        condition_label.pack(anchor="w")
+
+        # Wind and humidity
+        detail_frame = tk.Frame(info_frame, bg="white")
+        detail_frame.pack(side="right", fill="x", padx=10)
+
+        wind_label = tk.Label(detail_frame, 
+                            text=f"Wind: {forecast['wind']['speed']} m/s", 
+                            bg="white")
+        wind_label.pack(anchor="e")
+
+        humidity_label = tk.Label(detail_frame, 
+                                text=f"Humidity: {forecast['main']['humidity']}%", 
+                                bg="white")
+        humidity_label.pack(anchor="e")
+
+    def get_image_from_url(self, url, size):
+        try:
+            response = requests.get(url)
+            img_data = response.content
+            img = Image.open(io.BytesIO(img_data))
+            img = img.resize(size, Image.LANCZOS)
+            return ImageTk.PhotoImage(img)
+        except Exception as e:
+            print(f"Error loading image: {e}")
+            # Return empty image if loading fails
+            return ImageTk.PhotoImage(Image.new('RGBA', size))
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = WeatherApp(root)
+    root.mainloop()
